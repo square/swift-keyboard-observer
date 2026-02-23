@@ -2,7 +2,7 @@ import KeyboardObserver
 import UIKit
 
 final class DemoViewController: UIViewController, KeyboardObserverDelegate {
-    
+
     let overlapBoxBorderRadius: CGFloat = 4
 
     private let textField = UITextField()
@@ -64,7 +64,7 @@ final class DemoViewController: UIViewController, KeyboardObserverDelegate {
             frameLabel.text = "Keyboard overlapping by \(Int(overlap))pt"
             if keyboardFrame == .zero {
                 // A zero frame indicates that the floating keyboard is actively being dragged.
-                targetFrame  = self.overlapBox.frame
+                targetFrame = overlapBox.frame
                 targetHidden = true
             } else {
                 targetFrame = keyboardFrame
