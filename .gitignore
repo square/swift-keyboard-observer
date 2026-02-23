@@ -1,1 +1,19 @@
-# add files to ignore https://git-scm.com/docs/gitignore
+# macOS
+.DS_Store
+
+# SwiftPM
+.build/
+/Packages
+xcuserdata/
+DerivedData/
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.netrc
+Package.resolved
+
+# Tuist
+/Derived
+/Samples/Derived
+/Samples/*.xcodeproj
+/Samples/*.xcworkspace
+/*.xcodeproj
