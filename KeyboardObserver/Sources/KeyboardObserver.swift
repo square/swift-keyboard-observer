@@ -165,7 +165,9 @@ public final class KeyboardObserver {
             to: view
         )
 
-        if frame.intersects(view.bounds) {
+        let intersection = view.bounds.intersection(frame)
+        // Ignore trivial overlap that can result from fractional view sizes.
+        if intersection.width >= 1 && intersection.height >= 1 {
             return .overlapping(frame: frame)
         } else {
             return .nonOverlapping

@@ -306,6 +306,22 @@ class KeyboardObserverTests: XCTestCase {
         XCTAssertEqual(observer.currentFrame(in: windowedView), .nonOverlapping)
     }
 
+    func test_currentFrame_returnsNonOverlapping_whenOverlapIsTrivial() {
+        // Post a keyboard frame that overlaps the view by less than 1pt.
+        let userInfo: [AnyHashable: Any] = [
+            UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: CGRect(x: 0, y: 799.5, width: 400, height: 300)),
+            UIResponder.keyboardAnimationDurationUserInfoKey: NSNumber(value: 0.25),
+            UIResponder.keyboardAnimationCurveUserInfoKey: NSNumber(value: 7),
+        ]
+        center.post(Notification(
+            name: UIWindow.keyboardDidChangeFrameNotification,
+            object: UIScreen.main,
+            userInfo: userInfo
+        ))
+
+        XCTAssertEqual(observer.currentFrame(in: windowedView), .nonOverlapping)
+    }
+
     func test_currentFrame_returnsOverlapping_whenKeyboardIntersectsView() {
         // Post a keyboard frame that overlaps the view.
         let keyboardFrame = CGRect(x: 0, y: 500, width: 400, height: 300)
