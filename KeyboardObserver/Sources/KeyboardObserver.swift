@@ -15,6 +15,7 @@ public enum KeyboardFrame: Equatable {
     case nonOverlapping
 
     /// The current frame does overlap the view, by the provided rect, in the view's coordinate space.
+    /// To calculate the exact overlap of the view, use `view.bounds.intersection(frame)`.
     case overlapping(frame: CGRect)
 }
 
