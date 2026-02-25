@@ -5,10 +5,25 @@ import XCTest
 
 
 class KeyboardObserverTests: XCTestCase {
+    
+    var center: NotificationCenter!
+    var observer: KeyboardObserver!
+
+    lazy var windowedView: UIView = {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+        let view = UIView(frame: window.bounds)
+        window.addSubview(view)
+        window.makeKeyAndVisible()
+        return view
+    }()
+    
+    override func setUp() {
+        super.setUp()
+        center = NotificationCenter()
+        observer = KeyboardObserver(center: center)
+    }
 
     func test_add() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
 
         var delegate1: Delegate? = Delegate()
         weak let weakDelegate1 = delegate1
@@ -42,9 +57,6 @@ class KeyboardObserverTests: XCTestCase {
     }
 
     func test_remove() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
-
         let delegate1: Delegate? = Delegate()
 
         var delegate2: Delegate? = Delegate()
@@ -73,8 +85,6 @@ class KeyboardObserverTests: XCTestCase {
     }
 
     func test_notifications() {
-        let center = NotificationCenter()
-
         // Will Change Frame
         do {
             let observer = KeyboardObserver(center: center)
@@ -172,9 +182,6 @@ class KeyboardObserverTests: XCTestCase {
     }
 
     func test_delegate_notifiedForDifferentFrames() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
-
         let delegate = Delegate()
         observer.add(delegate: delegate)
 
@@ -208,8 +215,6 @@ class KeyboardObserverTests: XCTestCase {
 
 
     func test_isKeyboardFloating() {
-        let center = NotificationCenter()
-
         // Did Change Frame with a docked keyboard
         do {
             let observer = KeyboardObserver(center: center)
@@ -258,16 +263,10 @@ class KeyboardObserverTests: XCTestCase {
     }
 
     func test_isKeyboardFloating_returnsFalse_whenNoNotification() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
-
         XCTAssertFalse(observer.isKeyboardFloating(using: UIView()))
     }
 
     func test_currentFrame_returnsNil_whenViewHasNoWindow() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
-
         // Post a notification so the observer has a frame.
         let userInfo: [AnyHashable: Any] = [
             UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: CGRect(x: 0, y: 500, width: 400, height: 300)),
@@ -287,27 +286,11 @@ class KeyboardObserverTests: XCTestCase {
     }
 
     func test_currentFrame_returnsNil_whenNoNotificationReceived() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
-
         // Even with a windowed view, no notification results in a nil KeyboardFrame.
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
-        let view = UIView(frame: window.bounds)
-        window.addSubview(view)
-        window.makeKeyAndVisible()
-
-        XCTAssertNil(observer.currentFrame(in: view))
+        XCTAssertNil(observer.currentFrame(in: windowedView))
     }
 
     func test_currentFrame_returnsNonOverlapping_whenKeyboardDoesNotIntersect() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
-
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
-        let view = UIView(frame: window.bounds)
-        window.addSubview(view)
-        window.makeKeyAndVisible()
-
         // Post a keyboard frame that is entirely below the view.
         let userInfo: [AnyHashable: Any] = [
             UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: CGRect(x: 0, y: 900, width: 400, height: 300)),
@@ -320,18 +303,10 @@ class KeyboardObserverTests: XCTestCase {
             userInfo: userInfo
         ))
 
-        XCTAssertEqual(observer.currentFrame(in: view), .nonOverlapping)
+        XCTAssertEqual(observer.currentFrame(in: windowedView), .nonOverlapping)
     }
 
     func test_currentFrame_returnsOverlapping_whenKeyboardIntersectsView() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
-
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
-        let view = UIView(frame: window.bounds)
-        window.addSubview(view)
-        window.makeKeyAndVisible()
-
         // Post a keyboard frame that overlaps the view.
         let keyboardFrame = CGRect(x: 0, y: 500, width: 400, height: 300)
         let userInfo: [AnyHashable: Any] = [
@@ -345,7 +320,7 @@ class KeyboardObserverTests: XCTestCase {
             userInfo: userInfo
         ))
 
-        let result = observer.currentFrame(in: view)
+        let result = observer.currentFrame(in: windowedView)
         if case .overlapping(let frame) = result {
             XCTAssertEqual(frame, keyboardFrame)
         } else {
@@ -354,14 +329,6 @@ class KeyboardObserverTests: XCTestCase {
     }
 
     func test_currentFrame_returnsOverlapping_whenKeyboardPartiallyOverlapsView() {
-        let center = NotificationCenter()
-        let observer = KeyboardObserver(center: center)
-
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
-        let view = UIView(frame: window.bounds)
-        window.addSubview(view)
-        window.makeKeyAndVisible()
-
         // Post a keyboard frame that starts inside the view but extends beyond its bottom edge.
         let keyboardFrame = CGRect(x: 0, y: 500, width: 400, height: 600)
         let userInfo: [AnyHashable: Any] = [
@@ -375,7 +342,7 @@ class KeyboardObserverTests: XCTestCase {
             userInfo: userInfo
         ))
 
-        let result = observer.currentFrame(in: view)
+        let result = observer.currentFrame(in: windowedView)
         if case .overlapping(let frame) = result {
             XCTAssertEqual(frame, keyboardFrame)
         } else {
