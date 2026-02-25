@@ -3,7 +3,7 @@ import ProjectDescription
 
 public let keyboardObserverBundleIdPrefix = "com.squareup.keyboard-observer"
 public let keyboardObserverDestinations: ProjectDescription.Destinations = .iOS
-public let keyboardObserverDeploymentTargets: DeploymentTargets = .iOS("16.0")
+public let keyboardObserverDeploymentTargets: DeploymentTargets = .iOS("15.0")
 
 extension Target {
     public static func app(
