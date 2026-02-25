@@ -5,7 +5,7 @@ import XCTest
 
 
 class KeyboardObserverTests: XCTestCase {
-    
+
     var center: NotificationCenter!
     var observer: KeyboardObserver!
 
@@ -16,7 +16,7 @@ class KeyboardObserverTests: XCTestCase {
         window.makeKeyAndVisible()
         return view
     }()
-    
+
     override func setUp() {
         super.setUp()
         center = NotificationCenter()
