@@ -162,6 +162,10 @@ public final class KeyboardObserver {
             return .nonOverlapping
         }
 
+        guard notification.isOnScreen else {
+            return .nonOverlapping
+        }
+
         let frame = notification.frameScreen.fixedCoordinateSpace.convert(
             notification.frameInFixedCoordinateSpace,
             to: view
@@ -185,6 +189,10 @@ public final class KeyboardObserver {
     public func isKeyboardFloating(using view: UIView) -> Bool {
 
         guard let notification = latestNotification else {
+            return false
+        }
+
+        guard notification.isOnScreen else {
             return false
         }
 
@@ -215,6 +223,7 @@ public final class KeyboardObserver {
            old.endingFrame == new.endingFrame,
            old.frameScreen == new.frameScreen,
            old.frameInFixedCoordinateSpace == new.frameInFixedCoordinateSpace,
+           old.isOnScreen == new.isOnScreen,
            old.isKeyboardFloating == new.isKeyboardFloating
         {
             return
@@ -268,6 +277,7 @@ extension KeyboardObserver {
 
         var frameScreen: UIScreen
         var frameInFixedCoordinateSpace: CGRect
+        var isOnScreen: Bool
         var isKeyboardFloating: Bool
 
         init(with notification: Notification) throws {
@@ -302,6 +312,7 @@ extension KeyboardObserver {
             // can rotate before a later query, so retain the position in orientation-independent coordinates.
             // https://developer.apple.com/documentation/uikit/uiscreen/fixedcoordinatespace
             frameScreen = screen ?? .main
+            isOnScreen = endingFrame.intersects(frameScreen.bounds)
             frameInFixedCoordinateSpace = frameScreen.coordinateSpace.convert(
                 endingFrame,
                 to: frameScreen.fixedCoordinateSpace

@@ -376,6 +376,25 @@ class KeyboardObserverTests: XCTestCase {
         XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
     }
 
+    func test_cachedHiddenPortraitFrame_ignoresOffscreenOverlapAfterRotation() {
+        let fixture = RotatingScreenFixture()
+        postFrame(CGRect(x: 0, y: 1180, width: 820, height: 337), on: fixture.screen)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+
+        fixture.setLandscape(true)
+        // A transitional layout can extend into the cached hidden frame.
+        fixture.view.frame = CGRect(x: 0, y: 1100, width: 820, height: 708)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+    }
+
+    func test_hiddenSideFrame_isNotFloating() {
+        let fixture = RotatingScreenFixture()
+        postFrame(CGRect(x: 820, y: 0, width: 337, height: 820), on: fixture.screen)
+
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+        XCTAssertFalse(observer.isKeyboardFloating(using: fixture.view))
+    }
+
     func test_cachedVisibleFrame_preservesItsPositionAfterRotation() {
         let fixture = RotatingScreenFixture()
         fixture.setLandscape(true)
