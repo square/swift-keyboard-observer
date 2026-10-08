@@ -148,6 +148,7 @@ public final class KeyboardObserver {
     /// How the keyboard overlaps the view provided. If the view is not on screen (eg, no window),
     /// or the observer has not yet learned about the keyboard's position, this method returns nil.
     /// Notifications that omit their screen are assumed to describe the main display.
+    /// A keyboard that was offscreen when reported remains nonoverlapping until another notification arrives.
     public func currentFrame(in view: UIView) -> KeyboardFrame? {
 
         guard let window = view.window else {
@@ -277,6 +278,7 @@ extension KeyboardObserver {
 
         var frameScreen: UIScreen
         var frameInFixedCoordinateSpace: CGRect
+        /// Preserve visibility at notification time; rotation can move a cached offscreen frame into a view.
         var isOnScreen: Bool
         var isKeyboardFloating: Bool
 
