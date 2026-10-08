@@ -108,9 +108,23 @@ public final class KeyboardObserver {
             name: UIWindow.keyboardDidChangeFrameNotification,
             object: nil
         )
+        for name in [
+            UIResponder.keyboardWillHideNotification,
+            UIResponder.keyboardDidHideNotification,
+            UIResponder.keyboardWillShowNotification,
+            UIResponder.keyboardDidShowNotification,
+        ] {
+            self.center.addObserver(
+                self,
+                selector: #selector(keyboardVisibilityChanged(_:)),
+                name: name,
+                object: nil
+            )
+        }
     }
 
     private var latestNotification: NotificationInfo?
+    private var isKeyboardHidden = false
 
     //
     // MARK: Delegates
@@ -159,6 +173,10 @@ public final class KeyboardObserver {
             return nil
         }
 
+        guard !isKeyboardHidden else {
+            return .nonOverlapping
+        }
+
         guard notification.frameScreen == window.screen else {
             return .nonOverlapping
         }
@@ -189,6 +207,10 @@ public final class KeyboardObserver {
     /// - Returns: `true` if the keyboard is floating.
     public func isKeyboardFloating(using view: UIView) -> Bool {
 
+        guard !isKeyboardHidden else {
+            return false
+        }
+
         guard let notification = latestNotification else {
             return false
         }
@@ -212,15 +234,19 @@ public final class KeyboardObserver {
     // MARK: Receiving Updates
     //
 
-    private func receivedUpdatedKeyboardInfo(_ new: NotificationInfo) {
+    private func receivedUpdatedKeyboardInfo(_ new: NotificationInfo, forceNotify: Bool = false) {
 
         let old = latestNotification
 
         latestNotification = new
 
-        /// Only communicate a frame change to the delegate if the frame actually changed.
+        if isKeyboardHidden && !forceNotify {
+            return
+        }
 
-        if let old,
+        // A visibility change needs a callback even when the frame is unchanged.
+
+        if !forceNotify, let old,
            old.endingFrame == new.endingFrame,
            old.frameScreen == new.frameScreen,
            old.frameInFixedCoordinateSpace == new.frameInFixedCoordinateSpace,
@@ -248,6 +274,19 @@ public final class KeyboardObserver {
         do {
             let info = try NotificationInfo(with: notification)
             receivedUpdatedKeyboardInfo(info)
+        } catch {
+            assertionFailure("Could not read system keyboard notification: \(error)")
+        }
+    }
+
+    @objc private func keyboardVisibilityChanged(_ notification: Notification) {
+
+        do {
+            let info = try NotificationInfo(with: notification)
+            let wasHidden = isKeyboardHidden
+            isKeyboardHidden = notification.name == UIResponder.keyboardWillHideNotification
+                || notification.name == UIResponder.keyboardDidHideNotification
+            receivedUpdatedKeyboardInfo(info, forceNotify: wasHidden != isKeyboardHidden)
         } catch {
             assertionFailure("Could not read system keyboard notification: \(error)")
         }
