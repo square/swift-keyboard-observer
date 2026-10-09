@@ -108,9 +108,23 @@ public final class KeyboardObserver {
             name: UIWindow.keyboardDidChangeFrameNotification,
             object: nil
         )
+        for name in [
+            UIResponder.keyboardWillHideNotification,
+            UIResponder.keyboardDidHideNotification,
+            UIResponder.keyboardWillShowNotification,
+            UIResponder.keyboardDidShowNotification,
+        ] {
+            self.center.addObserver(
+                self,
+                selector: #selector(keyboardVisibilityChanged(_:)),
+                name: name,
+                object: nil
+            )
+        }
     }
 
     private var latestNotification: NotificationInfo?
+    private var isKeyboardHidden = false
 
     //
     // MARK: Delegates
@@ -148,6 +162,7 @@ public final class KeyboardObserver {
     /// How the keyboard overlaps the view provided. If the view is not on screen (eg, no window),
     /// or the observer has not yet learned about the keyboard's position, this method returns nil.
     /// Notifications that omit their screen are assumed to describe the main display.
+    /// A keyboard that was offscreen when reported remains nonoverlapping until another notification arrives.
     public func currentFrame(in view: UIView) -> KeyboardFrame? {
 
         guard let window = view.window else {
@@ -158,7 +173,15 @@ public final class KeyboardObserver {
             return nil
         }
 
+        guard !isKeyboardHidden else {
+            return .nonOverlapping
+        }
+
         guard notification.frameScreen == window.screen else {
+            return .nonOverlapping
+        }
+
+        guard notification.isOnScreen else {
             return .nonOverlapping
         }
 
@@ -184,7 +207,15 @@ public final class KeyboardObserver {
     /// - Returns: `true` if the keyboard is floating.
     public func isKeyboardFloating(using view: UIView) -> Bool {
 
+        guard !isKeyboardHidden else {
+            return false
+        }
+
         guard let notification = latestNotification else {
+            return false
+        }
+
+        guard notification.isOnScreen else {
             return false
         }
 
@@ -203,18 +234,23 @@ public final class KeyboardObserver {
     // MARK: Receiving Updates
     //
 
-    private func receivedUpdatedKeyboardInfo(_ new: NotificationInfo) {
+    private func receivedUpdatedKeyboardInfo(_ new: NotificationInfo, forceNotify: Bool = false) {
 
         let old = latestNotification
 
         latestNotification = new
 
-        /// Only communicate a frame change to the delegate if the frame actually changed.
+        if isKeyboardHidden && !forceNotify {
+            return
+        }
 
-        if let old,
+        // A visibility change needs a callback even when the frame is unchanged.
+
+        if !forceNotify, let old,
            old.endingFrame == new.endingFrame,
            old.frameScreen == new.frameScreen,
            old.frameInFixedCoordinateSpace == new.frameInFixedCoordinateSpace,
+           old.isOnScreen == new.isOnScreen,
            old.isKeyboardFloating == new.isKeyboardFloating
         {
             return
@@ -242,6 +278,18 @@ public final class KeyboardObserver {
             assertionFailure("Could not read system keyboard notification: \(error)")
         }
     }
+
+    @objc private func keyboardVisibilityChanged(_ notification: Notification) {
+
+        guard let info = try? NotificationInfo(with: notification) else {
+            return
+        }
+
+        let wasHidden = isKeyboardHidden
+        isKeyboardHidden = notification.name == UIResponder.keyboardWillHideNotification
+            || notification.name == UIResponder.keyboardDidHideNotification
+        receivedUpdatedKeyboardInfo(info, forceNotify: wasHidden != isKeyboardHidden)
+    }
 }
 
 extension KeyboardObserver {
@@ -268,6 +316,8 @@ extension KeyboardObserver {
 
         var frameScreen: UIScreen
         var frameInFixedCoordinateSpace: CGRect
+        /// Preserve visibility at notification time; rotation can move a cached offscreen frame into a view.
+        var isOnScreen: Bool
         var isKeyboardFloating: Bool
 
         init(with notification: Notification) throws {
@@ -302,6 +352,7 @@ extension KeyboardObserver {
             // can rotate before a later query, so retain the position in orientation-independent coordinates.
             // https://developer.apple.com/documentation/uikit/uiscreen/fixedcoordinatespace
             frameScreen = screen ?? .main
+            isOnScreen = endingFrame.intersects(frameScreen.bounds)
             frameInFixedCoordinateSpace = frameScreen.coordinateSpace.convert(
                 endingFrame,
                 to: frameScreen.fixedCoordinateSpace

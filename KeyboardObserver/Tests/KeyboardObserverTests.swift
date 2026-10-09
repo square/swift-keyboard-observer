@@ -376,6 +376,25 @@ class KeyboardObserverTests: XCTestCase {
         XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
     }
 
+    func test_cachedHiddenPortraitFrame_ignoresOffscreenOverlapAfterRotation() {
+        let fixture = RotatingScreenFixture()
+        postFrame(CGRect(x: 0, y: 1180, width: 820, height: 337), on: fixture.screen)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+
+        fixture.setLandscape(true)
+        // A transitional layout can extend into the cached hidden frame.
+        fixture.view.frame = CGRect(x: 0, y: 1100, width: 820, height: 708)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+    }
+
+    func test_hiddenSideFrame_isNotFloating() {
+        let fixture = RotatingScreenFixture()
+        postFrame(CGRect(x: 820, y: 0, width: 337, height: 820), on: fixture.screen)
+
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+        XCTAssertFalse(observer.isKeyboardFloating(using: fixture.view))
+    }
+
     func test_cachedVisibleFrame_preservesItsPositionAfterRotation() {
         let fixture = RotatingScreenFixture()
         fixture.setLandscape(true)
@@ -451,9 +470,52 @@ class KeyboardObserverTests: XCTestCase {
         XCTAssertFalse(observer.isKeyboardFloating(using: UIView()))
     }
 
-    private func postFrame(_ frame: CGRect, on screen: UIScreen?) {
+    func test_hideNotificationClearsOverlapWithoutFrameChange() {
+        let delegate = Delegate()
+        observer.add(delegate: delegate)
+        postFrame(CGRect(x: 0, y: 0, width: 200, height: 300), on: nil)
+        XCTAssertNotEqual(observer.currentFrame(in: windowedView), .nonOverlapping)
+
+        postFrame(
+            CGRect(x: 0, y: 800, width: 400, height: 300),
+            on: nil,
+            name: UIResponder.keyboardWillHideNotification
+        )
+
+        XCTAssertEqual(observer.currentFrame(in: windowedView), .nonOverlapping)
+        XCTAssertEqual(delegate.keyboardFrameWillChange_callCount, 2)
+    }
+
+    func test_hiddenKeyboardIgnoresLaterFrameChangesUntilShow() {
+        let fixture = RotatingScreenFixture()
+        fixture.setLandscape(true)
+        postFrame(CGRect(x: 0, y: 520, width: 1180, height: 300), on: fixture.screen)
+        postFrame(
+            CGRect(x: 0, y: 820, width: 1180, height: 66),
+            on: fixture.screen,
+            name: UIResponder.keyboardWillHideNotification
+        )
+        postFrame(CGRect(x: 0, y: 638, width: 1180, height: 182), on: fixture.screen)
+
+        fixture.setLandscape(false)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+        XCTAssertFalse(observer.isKeyboardFloating(using: fixture.view))
+
+        postFrame(
+            CGRect(x: 0, y: 843, width: 820, height: 337),
+            on: fixture.screen,
+            name: UIResponder.keyboardWillShowNotification
+        )
+        XCTAssertNotEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+    }
+
+    private func postFrame(
+        _ frame: CGRect,
+        on screen: UIScreen?,
+        name: Notification.Name = UIResponder.keyboardWillChangeFrameNotification
+    ) {
         center.post(
-            name: UIResponder.keyboardWillChangeFrameNotification,
+            name: name,
             object: screen,
             userInfo: [
                 UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: frame),
