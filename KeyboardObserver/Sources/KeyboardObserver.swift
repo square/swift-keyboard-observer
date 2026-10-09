@@ -281,15 +281,14 @@ public final class KeyboardObserver {
 
     @objc private func keyboardVisibilityChanged(_ notification: Notification) {
 
-        do {
-            let info = try NotificationInfo(with: notification)
-            let wasHidden = isKeyboardHidden
-            isKeyboardHidden = notification.name == UIResponder.keyboardWillHideNotification
-                || notification.name == UIResponder.keyboardDidHideNotification
-            receivedUpdatedKeyboardInfo(info, forceNotify: wasHidden != isKeyboardHidden)
-        } catch {
-            assertionFailure("Could not read system keyboard notification: \(error)")
+        guard let info = try? NotificationInfo(with: notification) else {
+            return
         }
+
+        let wasHidden = isKeyboardHidden
+        isKeyboardHidden = notification.name == UIResponder.keyboardWillHideNotification
+            || notification.name == UIResponder.keyboardDidHideNotification
+        receivedUpdatedKeyboardInfo(info, forceNotify: wasHidden != isKeyboardHidden)
     }
 }
 
