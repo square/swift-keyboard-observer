@@ -93,9 +93,8 @@ public final class KeyboardObserver {
         /// `willChangeFrame` with a `zero` frame, then it follows with `didChangeFrame` when
         /// the keyboard is done moving. Both delegates will cover all cases.
         ///
-        /// Before calling the delegate, we compare `old.endingFrame != new.endingFrame`,
-        /// which ensures that the delegate is notified if the frame really changes, and
-        /// prevents duplicate calls.
+        /// Before calling the delegate, we compare positions in fixed screen coordinates,
+        /// which prevents duplicate calls without conflating equal rectangles from different orientations.
 
         self.center.addObserver(
             self,
@@ -148,6 +147,7 @@ public final class KeyboardObserver {
 
     /// How the keyboard overlaps the view provided. If the view is not on screen (eg, no window),
     /// or the observer has not yet learned about the keyboard's position, this method returns nil.
+    /// Notifications that omit their screen are assumed to describe the main display.
     public func currentFrame(in view: UIView) -> KeyboardFrame? {
 
         guard let window = view.window else {
@@ -158,10 +158,12 @@ public final class KeyboardObserver {
             return nil
         }
 
-        let screen = notification.screen ?? window.screen
+        guard notification.frameScreen == window.screen else {
+            return .nonOverlapping
+        }
 
-        let frame = screen.coordinateSpace.convert(
-            notification.endingFrame,
+        let frame = notification.frameScreen.fixedCoordinateSpace.convert(
+            notification.frameInFixedCoordinateSpace,
             to: view
         )
 
@@ -176,7 +178,9 @@ public final class KeyboardObserver {
 
     /// This returns true if the on-screen keyboard is a floating iPad keyboard. This is done by
     /// comparing the keyboard frame against the bounds of the screen.
-    /// - Parameter view: The screen of this view is used if the latest notification has no screen.
+    /// Classification uses the screen bounds at notification time, so later rotation cannot
+    /// turn a cached docked keyboard into a floating one (or vice versa).
+    /// - Parameter view: Used to establish that a view is on screen when the notification has no screen.
     /// - Returns: `true` if the keyboard is floating.
     public func isKeyboardFloating(using view: UIView) -> Bool {
 
@@ -184,13 +188,15 @@ public final class KeyboardObserver {
             return false
         }
 
-        guard let screen = notification.screen ?? view.window?.screen else {
+        guard notification.screen != nil || view.window != nil else {
             return false
         }
 
-        let frame = notification.endingFrame
+        if let window = view.window, notification.frameScreen != window.screen {
+            return false
+        }
 
-        return frame.maxY < screen.bounds.maxY && frame.width < screen.bounds.width / 2
+        return notification.isKeyboardFloating
     }
 
     //
@@ -205,7 +211,12 @@ public final class KeyboardObserver {
 
         /// Only communicate a frame change to the delegate if the frame actually changed.
 
-        if let old, old.endingFrame == new.endingFrame {
+        if let old,
+           old.endingFrame == new.endingFrame,
+           old.frameScreen == new.frameScreen,
+           old.frameInFixedCoordinateSpace == new.frameInFixedCoordinateSpace,
+           old.isKeyboardFloating == new.isKeyboardFloating
+        {
             return
         }
 
@@ -255,6 +266,10 @@ extension KeyboardObserver {
         /// [Apple Documentation](https://developer.apple.com/documentation/uikit/uiresponder/1621623-keyboardwillchangeframenotificat)
         var screen: UIScreen?
 
+        var frameScreen: UIScreen
+        var frameInFixedCoordinateSpace: CGRect
+        var isKeyboardFloating: Bool
+
         init(with notification: Notification) throws {
 
             guard let userInfo = notification.userInfo else {
@@ -282,6 +297,17 @@ extension KeyboardObserver {
             self.animationCurve = animationCurve
 
             screen = notification.object as? UIScreen
+
+            // Keyboard rectangles use the screen's orientation at delivery. That coordinate space
+            // can rotate before a later query, so retain the position in orientation-independent coordinates.
+            // https://developer.apple.com/documentation/uikit/uiscreen/fixedcoordinatespace
+            frameScreen = screen ?? .main
+            frameInFixedCoordinateSpace = frameScreen.coordinateSpace.convert(
+                endingFrame,
+                to: frameScreen.fixedCoordinateSpace
+            )
+            isKeyboardFloating = endingFrame.maxY < frameScreen.bounds.maxY
+                && endingFrame.width < frameScreen.bounds.width / 2
         }
 
         enum ParseError: Error, Equatable {

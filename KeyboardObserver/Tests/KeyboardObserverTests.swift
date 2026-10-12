@@ -366,6 +366,103 @@ class KeyboardObserverTests: XCTestCase {
         }
     }
 
+    func test_cachedHiddenLandscapeFrame_remainsNonOverlappingAfterRotation() {
+        let fixture = RotatingScreenFixture()
+        fixture.setLandscape(true)
+        postFrame(CGRect(x: 0, y: 820, width: 1180, height: 364), on: fixture.screen)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+
+        fixture.setLandscape(false)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .nonOverlapping)
+    }
+
+    func test_cachedVisibleFrame_preservesItsPositionAfterRotation() {
+        let fixture = RotatingScreenFixture()
+        fixture.setLandscape(true)
+        let frame = CGRect(x: 0, y: 520, width: 1180, height: 300)
+        let expected = fixture.screen.coordinateSpace.convert(frame, to: fixture.view)
+        postFrame(frame, on: fixture.screen)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .overlapping(frame: expected))
+
+        fixture.setLandscape(false)
+        XCTAssertEqual(observer.currentFrame(in: fixture.view), .overlapping(frame: expected))
+    }
+
+    func test_equalRawFrames_notifyWhenTheirCoordinateSpaceChanges() {
+        let fixture = RotatingScreenFixture()
+        let delegate = Delegate()
+        observer.add(delegate: delegate)
+        let frame = CGRect(x: 0, y: 520, width: 1180, height: 300)
+        fixture.setLandscape(true)
+        postFrame(frame, on: fixture.screen)
+        XCTAssertEqual(delegate.keyboardFrameWillChange_callCount, 1)
+
+        fixture.setLandscape(false)
+        postFrame(frame, on: fixture.screen)
+        XCTAssertEqual(delegate.keyboardFrameWillChange_callCount, 2)
+    }
+
+    func test_cachedFloatingClassification_doesNotChangeWithOrientation() {
+        let fixture = RotatingScreenFixture()
+        fixture.setLandscape(true)
+        postFrame(CGRect(x: 0, y: 100, width: 500, height: 300), on: fixture.screen)
+        XCTAssertTrue(observer.isKeyboardFloating(using: fixture.view))
+
+        fixture.setLandscape(false)
+        XCTAssertTrue(observer.isKeyboardFloating(using: fixture.view))
+    }
+
+    func test_changedRawFrame_notifiesEvenWhenFixedPositionIsUnchanged() {
+        let fixture = RotatingScreenFixture()
+        let delegate = Delegate()
+        observer.add(delegate: delegate)
+        fixture.setLandscape(true)
+        let landscapeFrame = CGRect(x: 0, y: 520, width: 1180, height: 300)
+        let fixedFrame = fixture.screen.coordinateSpace.convert(
+            landscapeFrame,
+            to: fixture.screen.fixedCoordinateSpace
+        )
+        postFrame(landscapeFrame, on: fixture.screen)
+        XCTAssertEqual(delegate.keyboardFrameWillChange_callCount, 1)
+
+        // Views rotate too. Preserve the callback so clients can recalculate their local overlap.
+        fixture.setLandscape(false)
+        postFrame(fixedFrame, on: fixture.screen)
+        XCTAssertEqual(delegate.keyboardFrameWillChange_callCount, 2)
+    }
+
+    func test_keyboardOnAnotherScreen_doesNotAffectView() {
+        let fixture = RotatingScreenFixture()
+        postFrame(CGRect(x: 0, y: 100, width: 150, height: 300), on: fixture.screen)
+        XCTAssertTrue(observer.isKeyboardFloating(using: fixture.view))
+
+        let otherWindow = UIWindow(frame: fixture.window.bounds)
+        let otherView = UIView(frame: otherWindow.bounds)
+        otherWindow.addSubview(otherView)
+        XCTAssertNotEqual(otherWindow.screen, fixture.screen)
+        XCTAssertEqual(observer.currentFrame(in: otherView), .nonOverlapping)
+        XCTAssertFalse(observer.isKeyboardFloating(using: otherView))
+    }
+
+    func test_notificationWithoutScreen_usesMainScreenCoordinates() {
+        let frame = CGRect(x: 0, y: 500, width: 400, height: 300)
+        postFrame(frame, on: nil)
+        XCTAssertEqual(observer.currentFrame(in: windowedView), .overlapping(frame: frame))
+        XCTAssertFalse(observer.isKeyboardFloating(using: UIView()))
+    }
+
+    private func postFrame(_ frame: CGRect, on screen: UIScreen?) {
+        center.post(
+            name: UIResponder.keyboardWillChangeFrameNotification,
+            object: screen,
+            userInfo: [
+                UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: frame),
+                UIResponder.keyboardAnimationDurationUserInfoKey: 0,
+                UIResponder.keyboardAnimationCurveUserInfoKey: UIView.AnimationCurve.easeInOut.rawValue,
+            ]
+        )
+    }
+
     final class Delegate: KeyboardObserverDelegate {
 
         var keyboardFrameWillChange_callCount: Int = 0
@@ -382,6 +479,56 @@ class KeyboardObserverTests: XCTestCase {
             lastAnimationDuration = animationDuration
             lastAnimationCurve = animationCurve
         }
+    }
+}
+
+/// Models a screen's mutable oriented coordinates using UIKit's real coordinate conversions.
+/// The window stays in portrait coordinates so that querying the cache cannot change the fixture's geometry.
+private final class RotatingScreenFixture {
+    let window = ScreenWindow(frame: CGRect(x: 0, y: 0, width: 820, height: 1180))
+    let view = UIView(frame: CGRect(x: 0, y: 0, width: 820, height: 1180))
+    let orientedSpace = UIView()
+    let screen: Screen
+
+    init() {
+        screen = Screen(fixedSpace: window, orientedSpace: orientedSpace)
+        window.observedScreen = screen
+        window.addSubview(orientedSpace)
+        window.addSubview(view)
+        setLandscape(false)
+    }
+
+    func setLandscape(_ landscape: Bool) {
+        orientedSpace.transform = .identity
+        orientedSpace.bounds = CGRect(
+            origin: .zero,
+            size: landscape ? CGSize(width: 1180, height: 820) : window.bounds.size
+        )
+        orientedSpace.center = CGPoint(x: window.bounds.midX, y: window.bounds.midY)
+        orientedSpace.transform = landscape ? CGAffineTransform(rotationAngle: .pi / 2) : .identity
+    }
+
+    final class ScreenWindow: UIWindow {
+        weak var observedScreen: UIScreen?
+        override var screen: UIScreen {
+            get { observedScreen ?? super.screen }
+            set { super.screen = newValue }
+        }
+    }
+
+    final class Screen: UIScreen {
+        let fixedSpace: UICoordinateSpace
+        let orientedSpace: UIView
+
+        init(fixedSpace: UICoordinateSpace, orientedSpace: UIView) {
+            self.fixedSpace = fixedSpace
+            self.orientedSpace = orientedSpace
+            super.init()
+        }
+
+        override var bounds: CGRect { orientedSpace.bounds }
+        override var coordinateSpace: UICoordinateSpace { orientedSpace }
+        override var fixedCoordinateSpace: UICoordinateSpace { fixedSpace }
     }
 }
 
